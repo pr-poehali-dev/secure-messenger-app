@@ -1,16 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import Icon from '@/components/ui/icon';
 
 interface User {
   id: string;
   name: string;
+  username: string;
   avatar: string;
   status: 'online' | 'offline';
   lastMessage?: string;
@@ -27,6 +32,23 @@ interface Message {
   isOwn: boolean;
 }
 
+interface UserProfile {
+  name: string;
+  username: string;
+  avatar: string;
+  bio: string;
+  privacy: {
+    showOnline: boolean;
+    readReceipts: boolean;
+    showAvatar: boolean;
+  };
+  notifications: {
+    desktop: boolean;
+    sound: boolean;
+    showPreview: boolean;
+  };
+}
+
 const Index = () => {
   const [currentView, setCurrentView] = useState<'auth' | 'messenger'>('auth');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -34,14 +56,42 @@ const Index = () => {
   const [newMessage, setNewMessage] = useState('');
   const [loginData, setLoginData] = useState({ name: '', password: '' });
   const [registerData, setRegisterData] = useState({ name: '', password: '', confirmPassword: '' });
-  const [currentUser, setCurrentUser] = useState<string>('Вы');
   const [searchQuery, setSearchQuery] = useState('');
+  const [rightSidebarView, setRightSidebarView] = useState<'default' | 'profile' | 'privacy' | 'notifications' | 'settings' | 'contacts' | 'add-contact'>('default');
+  const [addContactUsername, setAddContactUsername] = useState('');
+  const [showAddContactDialog, setShowAddContactDialog] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: 'Вы',
+    username: 'you',
+    avatar: '',
+    bio: 'Hey there! I am using SecureChat',
+    privacy: {
+      showOnline: true,
+      readReceipts: true,
+      showAvatar: true,
+    },
+    notifications: {
+      desktop: true,
+      sound: true,
+      showPreview: false,
+    }
+  });
+
+  const [availableUsers] = useState<User[]>([
+    { id: 'bot1', name: 'Tech Support', username: 'techsupport', avatar: '/placeholder.svg', status: 'online' },
+    { id: 'bot2', name: 'News Bot', username: 'newsbot', avatar: '/placeholder.svg', status: 'online' },
+    { id: 'bot3', name: 'Weather Assistant', username: 'weatherbot', avatar: '/placeholder.svg', status: 'online' },
+    { id: 'bot4', name: 'AI Helper', username: 'aihelper', avatar: '/placeholder.svg', status: 'online' },
+    { id: 'bot5', name: 'Crypto Tracker', username: 'cryptobot', avatar: '/placeholder.svg', status: 'offline' },
+  ]);
 
   const [chats, setChats] = useState<User[]>([
-    { id: '1', name: 'Анна Петрова', avatar: '/placeholder.svg', status: 'online', lastMessage: 'Привет! Как дела?', time: '14:30', unread: 2 },
-    { id: '2', name: 'Команда Разработки', avatar: '/placeholder.svg', status: 'online', lastMessage: 'Новые обновления готовы', time: '13:45', unread: 1 },
-    { id: '3', name: 'Михаил Соколов', avatar: '/placeholder.svg', status: 'offline', lastMessage: 'Увидимся завтра', time: '12:20' },
-    { id: '4', name: 'Мария Иванова', avatar: '/placeholder.svg', status: 'online', lastMessage: 'Спасибо за помощь!', time: '11:15' },
+    { id: '1', name: 'Анна Петрова', username: 'anna_petrova', avatar: '/placeholder.svg', status: 'online', lastMessage: 'Привет! Как дела?', time: '14:30', unread: 2 },
+    { id: '2', name: 'Команда Разработки', username: 'dev_team', avatar: '/placeholder.svg', status: 'online', lastMessage: 'Новые обновления готовы', time: '13:45', unread: 1 },
+    { id: '3', name: 'Михаил Соколов', username: 'mikhail_s', avatar: '/placeholder.svg', status: 'offline', lastMessage: 'Увидимся завтра', time: '12:20' },
+    { id: '4', name: 'Мария Иванова', username: 'maria_ivanova', avatar: '/placeholder.svg', status: 'online', lastMessage: 'Спасибо за помощь!', time: '11:15' },
   ]);
 
   const [messages, setMessages] = useState<Message[]>([
@@ -65,10 +115,65 @@ const Index = () => {
 
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
 
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUserProfile(prev => ({ ...prev, avatar: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddContact = () => {
+    if (!addContactUsername.trim()) return;
+    
+    const userToAdd = availableUsers.find(u => 
+      u.username.toLowerCase() === addContactUsername.toLowerCase().replace('@', '')
+    );
+    
+    if (userToAdd && !chats.find(c => c.username === userToAdd.username)) {
+      const newChat: User = {
+        ...userToAdd,
+        lastMessage: 'Начните беседу',
+        time: getCurrentTime(),
+        unread: 0
+      };
+      
+      setChats(prev => [...prev, newChat]);
+      setShowAddContactDialog(false);
+      setAddContactUsername('');
+      setSelectedChat(userToAdd.id);
+      
+      // Отправляем приветственное сообщение от бота
+      setTimeout(() => {
+        const welcomeMsg: Message = {
+          id: Date.now().toString(),
+          chatId: userToAdd.id,
+          sender: userToAdd.name,
+          content: `Привет! Я ${userToAdd.name}. Чем могу помочь?`,
+          time: getCurrentTime(),
+          isOwn: false
+        };
+        setMessages(prev => [...prev, welcomeMsg]);
+        setChats(prev => prev.map(chat => 
+          chat.id === userToAdd.id 
+            ? { ...chat, lastMessage: welcomeMsg.content, time: getCurrentTime() }
+            : chat
+        ));
+      }, 1000);
+    }
+  };
+
   const handleAuth = () => {
     const username = authMode === 'login' ? loginData.name : registerData.name;
     if (username.trim()) {
-      setCurrentUser(username);
+      setUserProfile(prev => ({
+        ...prev,
+        name: username,
+        username: username.toLowerCase().replace(/\s+/g, '_')
+      }));
       setCurrentView('messenger');
     }
   };
@@ -85,7 +190,7 @@ const Index = () => {
       const newMsg: Message = {
         id: Date.now().toString(),
         chatId: selectedChat,
-        sender: currentUser,
+        sender: userProfile.name,
         content: newMessage,
         time: getCurrentTime(),
         isOwn: true
@@ -163,6 +268,7 @@ const Index = () => {
     if (!searchQuery.trim()) return chats;
     return chats.filter(chat => 
       chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      chat.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       chat.lastMessage?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   };
@@ -319,7 +425,7 @@ const Index = () => {
               <Button variant="ghost" size="sm">
                 <Icon name="Search" className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" onClick={() => setShowAddContactDialog(true)}>
                 <Icon name="Plus" className="h-4 w-4" />
               </Button>
             </div>
@@ -352,7 +458,7 @@ const Index = () => {
                       <AvatarImage src={chat.avatar} />
                       <AvatarFallback>{chat.name[0]}</AvatarFallback>
                     </Avatar>
-                    {chat.status === 'online' && (
+                    {chat.status === 'online' && userProfile.privacy.showOnline && (
                       <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></div>
                     )}
                   </div>
@@ -386,13 +492,16 @@ const Index = () => {
         <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
-              <AvatarFallback>{currentUser[0]}</AvatarFallback>
+              {userProfile.avatar ? (
+                <AvatarImage src={userProfile.avatar} />
+              ) : null}
+              <AvatarFallback>{userProfile.name[0]}</AvatarFallback>
             </Avatar>
             <div className="flex-1">
-              <p className="text-sm font-medium">{currentUser}</p>
+              <p className="text-sm font-medium">{userProfile.name}</p>
               <p className="text-xs text-green-600">В сети</p>
             </div>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => setRightSidebarView('settings')}>
               <Icon name="Settings" className="h-4 w-4" />
             </Button>
           </div>
@@ -450,6 +559,7 @@ const Index = () => {
                         message.isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground/70'
                       }`}>
                         {message.time}
+                        {message.isOwn && userProfile.privacy.readReceipts && ' ✓✓'}
                       </p>
                     </div>
                   </div>
@@ -495,62 +605,559 @@ const Index = () => {
                 <Icon name="MessageCircle" className="h-12 w-12 text-muted-foreground" />
               </div>
               <h2 className="text-xl font-semibold mb-2">Выберите чат</h2>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mb-4">
                 Выберите существующий чат или начните новую беседу
               </p>
+              <Button onClick={() => setShowAddContactDialog(true)}>
+                <Icon name="Plus" className="h-4 w-4 mr-2" />
+                Добавить контакт
+              </Button>
             </div>
           </div>
         )}
       </div>
       
       {/* Right sidebar - Profile/Settings */}
-      <div className="w-64 border-l border-border p-4 space-y-6">
-        <div className="text-center">
-          <Avatar className="h-20 w-20 mx-auto mb-3">
-            <AvatarFallback className="text-lg">{currentUser[0]}</AvatarFallback>
-          </Avatar>
-          <h3 className="font-semibold">{currentUser}</h3>
-          <p className="text-sm text-muted-foreground">@{currentUser.toLowerCase().replace(' ', '_')}</p>
-        </div>
-        
-        <div className="space-y-3">
-          <Button variant="outline" className="w-full justify-start">
-            <Icon name="User" className="h-4 w-4 mr-2" />
-            Профиль
-          </Button>
-          <Button variant="outline" className="w-full justify-start">
-            <Icon name="Users" className="h-4 w-4 mr-2" />
-            Контакты
-          </Button>
-          <Button variant="outline" className="w-full justify-start">
-            <Icon name="Bell" className="h-4 w-4 mr-2" />
-            Уведомления
-          </Button>
-          <Button variant="outline" className="w-full justify-start">
-            <Icon name="Shield" className="h-4 w-4 mr-2" />
-            Приватность
-          </Button>
-          <Button variant="outline" className="w-full justify-start">
-            <Icon name="Settings" className="h-4 w-4 mr-2" />
-            Настройки
-          </Button>
-        </div>
-        
-        <div className="pt-4 border-t border-border space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>🔒 E2E шифрование</span>
-            <Badge variant="secondary" className="text-xs">v1.0</Badge>
+      <div className="w-80 border-l border-border flex flex-col">
+        {rightSidebarView === 'default' && (
+          <div className="p-4 space-y-6">
+            <div className="text-center">
+              <Avatar className="h-20 w-20 mx-auto mb-3 cursor-pointer" onClick={() => setRightSidebarView('profile')}>
+                {userProfile.avatar ? (
+                  <AvatarImage src={userProfile.avatar} />
+                ) : null}
+                <AvatarFallback className="text-lg">{userProfile.name[0]}</AvatarFallback>
+              </Avatar>
+              <h3 className="font-semibold">{userProfile.name}</h3>
+              <p className="text-sm text-muted-foreground">@{userProfile.username}</p>
+              <p className="text-xs text-muted-foreground mt-2">{userProfile.bio}</p>
+            </div>
+            
+            <div className="space-y-3">
+              <Button variant="outline" className="w-full justify-start" onClick={() => setRightSidebarView('profile')}>
+                <Icon name="User" className="h-4 w-4 mr-2" />
+                Профиль
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={() => setRightSidebarView('contacts')}>
+                <Icon name="Users" className="h-4 w-4 mr-2" />
+                Контакты
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={() => setRightSidebarView('notifications')}>
+                <Icon name="Bell" className="h-4 w-4 mr-2" />
+                Уведомления
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={() => setRightSidebarView('privacy')}>
+                <Icon name="Shield" className="h-4 w-4 mr-2" />
+                Приватность
+              </Button>
+              <Button variant="outline" className="w-full justify-start" onClick={() => setRightSidebarView('settings')}>
+                <Icon name="Settings" className="h-4 w-4 mr-2" />
+                Настройки
+              </Button>
+            </div>
+            
+            <div className="pt-4 border-t border-border space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>🔒 E2E шифрование</span>
+                <Badge variant="secondary" className="text-xs">v1.0</Badge>
+              </div>
+              <Button 
+                variant="outline" 
+                className="w-full text-red-600 hover:text-red-700 justify-start" 
+                onClick={() => setCurrentView('auth')}
+              >
+                <Icon name="LogOut" className="h-4 w-4 mr-2" />
+                Выйти
+              </Button>
+            </div>
           </div>
-          <Button 
-            variant="outline" 
-            className="w-full text-red-600 hover:text-red-700 justify-start" 
-            onClick={() => setCurrentView('auth')}
-          >
-            <Icon name="LogOut" className="h-4 w-4 mr-2" />
-            Выйти
-          </Button>
-        </div>
+        )}
+
+        {/* Profile Settings View */}
+        {rightSidebarView === 'profile' && (
+          <div className="flex-1 flex flex-col">
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRightSidebarView('default')}
+                >
+                  <Icon name="ArrowLeft" className="h-4 w-4" />
+                </Button>
+                <h2 className="text-lg font-semibold">Профиль</h2>
+              </div>
+            </div>
+            
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-6">
+                <div className="flex justify-center">
+                  <div className="relative">
+                    <Avatar className="h-24 w-24 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                      {userProfile.avatar ? (
+                        <AvatarImage src={userProfile.avatar} />
+                      ) : null}
+                      <AvatarFallback className="text-2xl">{userProfile.name[0]}</AvatarFallback>
+                    </Avatar>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute -bottom-2 -right-2 rounded-full h-8 w-8 p-0"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Icon name="Camera" className="h-4 w-4" />
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Имя</Label>
+                    <Input
+                      value={userProfile.name}
+                      onChange={(e) => setUserProfile(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Имя пользователя</Label>
+                    <Input
+                      value={userProfile.username}
+                      onChange={(e) => setUserProfile(prev => ({ ...prev, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
+                      placeholder="username"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Другие могут найти вас по @{userProfile.username}
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>О себе</Label>
+                    <Input
+                      value={userProfile.bio}
+                      onChange={(e) => setUserProfile(prev => ({ ...prev, bio: e.target.value }))}
+                      placeholder="Расскажите о себе"
+                    />
+                  </div>
+                </div>
+                
+                <Button className="w-full">Сохранить изменения</Button>
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Privacy Settings View */}
+        {rightSidebarView === 'privacy' && (
+          <div className="flex-1 flex flex-col">
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRightSidebarView('default')}
+                >
+                  <Icon name="ArrowLeft" className="h-4 w-4" />
+                </Button>
+                <h2 className="text-lg font-semibold">Приватность</h2>
+              </div>
+            </div>
+            
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Кто может видеть</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Онлайн статус</p>
+                        <p className="text-xs text-muted-foreground">
+                          Показывать когда вы в сети
+                        </p>
+                      </div>
+                      <Switch
+                        checked={userProfile.privacy.showOnline}
+                        onCheckedChange={(checked) => 
+                          setUserProfile(prev => ({
+                            ...prev,
+                            privacy: { ...prev.privacy, showOnline: checked }
+                          }))
+                        }
+                      />
+                    </div>
+                    
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Отчеты о прочтении</p>
+                        <p className="text-xs text-muted-foreground">
+                          Показывать галочки прочтения
+                        </p>
+                      </div>
+                      <Switch
+                        checked={userProfile.privacy.readReceipts}
+                        onCheckedChange={(checked) => 
+                          setUserProfile(prev => ({
+                            ...prev,
+                            privacy: { ...prev.privacy, readReceipts: checked }
+                          }))
+                        }
+                      />
+                    </div>
+                    
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Фото профиля</p>
+                        <p className="text-xs text-muted-foreground">
+                          Кто может видеть ваше фото
+                        </p>
+                      </div>
+                      <Switch
+                        checked={userProfile.privacy.showAvatar}
+                        onCheckedChange={(checked) => 
+                          setUserProfile(prev => ({
+                            ...prev,
+                            privacy: { ...prev.privacy, showAvatar: checked }
+                          }))
+                        }
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Безопасность</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="Key" className="h-4 w-4 mr-2" />
+                      Изменить пароль
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="Shield" className="h-4 w-4 mr-2" />
+                      Двухфакторная аутентификация
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="Lock" className="h-4 w-4 mr-2" />
+                      Заблокированные пользователи
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Notifications Settings View */}
+        {rightSidebarView === 'notifications' && (
+          <div className="flex-1 flex flex-col">
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRightSidebarView('default')}
+                >
+                  <Icon name="ArrowLeft" className="h-4 w-4" />
+                </Button>
+                <h2 className="text-lg font-semibold">Уведомления</h2>
+              </div>
+            </div>
+            
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Настройки уведомлений</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Push-уведомления</p>
+                        <p className="text-xs text-muted-foreground">
+                          Получать уведомления на рабочий стол
+                        </p>
+                      </div>
+                      <Switch
+                        checked={userProfile.notifications.desktop}
+                        onCheckedChange={(checked) => 
+                          setUserProfile(prev => ({
+                            ...prev,
+                            notifications: { ...prev.notifications, desktop: checked }
+                          }))
+                        }
+                      />
+                    </div>
+                    
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Звук уведомлений</p>
+                        <p className="text-xs text-muted-foreground">
+                          Воспроизводить звук при новых сообщениях
+                        </p>
+                      </div>
+                      <Switch
+                        checked={userProfile.notifications.sound}
+                        onCheckedChange={(checked) => 
+                          setUserProfile(prev => ({
+                            ...prev,
+                            notifications: { ...prev.notifications, sound: checked }
+                          }))
+                        }
+                      />
+                    </div>
+                    
+                    <Separator />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Предпросмотр</p>
+                        <p className="text-xs text-muted-foreground">
+                          Показывать текст сообщения в уведомлении
+                        </p>
+                      </div>
+                      <Switch
+                        checked={userProfile.notifications.showPreview}
+                        onCheckedChange={(checked) => 
+                          setUserProfile(prev => ({
+                            ...prev,
+                            notifications: { ...prev.notifications, showPreview: checked }
+                          }))
+                        }
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Расписание</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Настройте время, когда вы хотите получать уведомления
+                    </p>
+                    <Button variant="outline" className="w-full">
+                      <Icon name="Clock" className="h-4 w-4 mr-2" />
+                      Настроить расписание
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Contacts View */}
+        {rightSidebarView === 'contacts' && (
+          <div className="flex-1 flex flex-col">
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setRightSidebarView('default')}
+                  >
+                    <Icon name="ArrowLeft" className="h-4 w-4" />
+                  </Button>
+                  <h2 className="text-lg font-semibold">Контакты</h2>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAddContactDialog(true)}
+                >
+                  <Icon name="UserPlus" className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">Мои контакты</h3>
+                  {chats.map((contact) => (
+                    <div
+                      key={contact.id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer"
+                      onClick={() => {
+                        handleChatSelect(contact.id);
+                        setRightSidebarView('default');
+                      }}
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={contact.avatar} />
+                        <AvatarFallback>{contact.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{contact.name}</p>
+                        <p className="text-xs text-muted-foreground">@{contact.username}</p>
+                      </div>
+                      <Badge variant={contact.status === 'online' ? 'default' : 'secondary'} className="text-xs">
+                        {contact.status === 'online' ? 'В сети' : 'Не в сети'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+                
+                <Separator />
+                
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">Рекомендуемые контакты</h3>
+                  {availableUsers.filter(u => !chats.find(c => c.username === u.username)).map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent"
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.avatar} />
+                        <AvatarFallback>{user.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{user.name}</p>
+                        <p className="text-xs text-muted-foreground">@{user.username}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setAddContactUsername(`@${user.username}`);
+                          handleAddContact();
+                        }}
+                      >
+                        Добавить
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Settings View */}
+        {rightSidebarView === 'settings' && (
+          <div className="flex-1 flex flex-col">
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRightSidebarView('default')}
+                >
+                  <Icon name="ArrowLeft" className="h-4 w-4" />
+                </Button>
+                <h2 className="text-lg font-semibold">Настройки</h2>
+              </div>
+            </div>
+            
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Общие настройки</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="Globe" className="h-4 w-4 mr-2" />
+                      Язык интерфейса
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="Palette" className="h-4 w-4 mr-2" />
+                      Тема оформления
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="Type" className="h-4 w-4 mr-2" />
+                      Размер шрифта
+                    </Button>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Данные и хранилище</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="Download" className="h-4 w-4 mr-2" />
+                      Экспорт данных
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start">
+                      <Icon name="HardDrive" className="h-4 w-4 mr-2" />
+                      Управление хранилищем
+                    </Button>
+                    <Button variant="outline" className="w-full justify-start text-red-600">
+                      <Icon name="Trash2" className="h-4 w-4 mr-2" />
+                      Очистить кэш
+                    </Button>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">О приложении</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    <p>SecureChat v1.0</p>
+                    <p>© 2024 SecureChat Inc.</p>
+                    <p>Безопасный мессенджер с E2E шифрованием</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+          </div>
+        )}
       </div>
+
+      {/* Add Contact Dialog */}
+      <Dialog open={showAddContactDialog} onOpenChange={setShowAddContactDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Добавить контакт</DialogTitle>
+            <DialogDescription>
+              Введите имя пользователя для добавления в контакты
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Имя пользователя</Label>
+              <Input
+                placeholder="@username"
+                value={addContactUsername}
+                onChange={(e) => setAddContactUsername(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAddContact()}
+              />
+              <p className="text-xs text-muted-foreground">
+                Попробуйте: @techsupport, @newsbot, @weatherbot, @aihelper, @cryptobot
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddContactDialog(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleAddContact} disabled={!addContactUsername.trim()}>
+              Добавить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
